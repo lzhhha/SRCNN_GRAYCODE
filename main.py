@@ -34,7 +34,7 @@ torch.cuda.manual_seed(0)
 
 # Parameters
 BATCH_SIZE = 4
-NUM_WORKERS = 1 # on Windows, set this variable to 0
+NUM_WORKERS = 0 # on Windows, set this variable to 0
 
 trainset = DatasetFromFolder(split='train', hr_path=args.hr_path, lr_path=args.lr_path, zoom_factor=args.zoom_factor)
 testset = DatasetFromFolder(split='test', hr_path=args.hrval_path, lr_path=args.lrval_path, zoom_factor=args.zoom_factor)
@@ -113,6 +113,7 @@ def channel_8_1(sr):
     x_finally = torch.from_numpy(np.ascontiguousarray(x_finally)).float()  # [4,1,32,32]
     # x_finally /= 255
     x_finally = x_finally.cuda()
+    # print(x_finally)
 
     return x_finally
 
@@ -152,8 +153,8 @@ for epoch in range(args.nb_epochs):
         # sr_8 = out.cpu().detach().data.numpy()
         # hr_8 = np.transpose(hr_8[0], [1, 2, 0])     # [96,96,8]
         # sr_8 = np.transpose(sr_8[0], [1, 2, 0])     # [96,96,8]
-        #
-        # cv2.imwrite('/export/liuzhe/program2/SRCNN/hr_8_sr_8/hr.png', hr_8 * 255)
+
+        # cv2.imwrite('/export/liuzhe/program2/SRCNN/hr_8_sr_8/hr.png', hr_8)
         # cv2.imwrite('/export/liuzhe/program2/SRCNN/hr_8_sr_8/sr.png', sr_8 * 255 * 255)
 
         # for i in range(8):
@@ -188,10 +189,13 @@ for epoch in range(args.nb_epochs):
 
     # Test
     avg_psnr = 0
+    num = 0
     with torch.no_grad():
         for batch in testloader:
+            num = num+1
             input, target, not_8 = batch[0].to(device), batch[1].to(device), batch[3].to(device)
 
+            # model = torch.load('model_70.pth').to(device)
             out = model(input, not_8)
 
             # hr_8 = target.cpu().detach().data.numpy()
@@ -205,18 +209,29 @@ for epoch in range(args.nb_epochs):
             # print(psnr)
             # exit(-1)
 
-
-            # print(hr_8.shape)
-            # print(sr_8.shape)
-
             # cv2.imwrite('/export/liuzhe/program2/SRCNN/hr_8_sr_8/hr.png', hr_8 * 255)
             # cv2.imwrite('/export/liuzhe/program2/SRCNN/hr_8_sr_8/sr.png', sr_8 * 255)
             # exit(-1)
 
-            loss = mse(out, target)
-            # out = channel_8_1(out)
-            # target = channel_8_1(target)  # out = [4,1,32,32], target = [4,1,32,32]
-            psnr = 10 * log10(1 / loss.item())
+            # loss = mse(out, target)
+
+            out = channel_8_1(out)
+            target = channel_8_1(target)  # out = [4,1,32,32], target = [4,1,32,32]
+
+            out = out.cpu().detach().data.numpy()[0, 0, :, :]
+            target = target.cpu().detach().data.numpy()[0, 0, :, :]
+            import skimage.measure
+            psnr = skimage.measure.compare_psnr(out, target, 255)
+            # print(psnr)
+
+            # import imageio
+            # imageio.imwrite('/export/liuzhe/program2/SRCNN/data/'
+            #                 +str(num)+'out.png',out)
+            # imageio.imwrite('/export/liuzhe/program2/SRCNN/data/'
+            #                 + str(num) + 'target.png', target)
+
+            # psnr = 10 * log10(1 / loss.item())
+            # print(psnr)
             avg_psnr += psnr
     print(f"Average PSNR: {avg_psnr / len(testloader)} dB.")
 
