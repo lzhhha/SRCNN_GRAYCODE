@@ -7,26 +7,69 @@ from PIL import Image
 import matplotlib.pyplot as plt
 import cv2
 import io
+import torch.nn.functional as F
+import skimage.measure
 
 parser = argparse.ArgumentParser(description='SRCNN run parameters')
 parser.add_argument('--model', type=str, required=True)
-parser.add_argument('--image', type=str, required=True)
+parser.add_argument('--image', type=str, default='/export/liuzhe/program2/SRCNN/Set5/x2/',
+                    help='hr_dataset directory', required=True)
 parser.add_argument('--zoom_factor', type=int, required=True)
 parser.add_argument('--cuda', action='store_true')
 args = parser.parse_args()
 
 img = Image.open(args.image).convert('YCbCr')
-img = img.resize((int(img.size[0]*args.zoom_factor), int(img.size[1]*args.zoom_factor)), Image.BICUBIC)  # first, we upscale the image via bicubic interpolation
+# img = img.resize((int(img.size[0]*args.zoom_factor), int(img.size[1]*args.zoom_factor)), Image.BICUBIC)  # first, we upscale the image via bicubic interpolation
 y, cb, cr = img.split()
-img_to_tensor = transforms.ToTensor()
-input = img_to_tensor(y).view(1, -1, y.size[1], y.size[0])  # we only work with the "Y" channel
+
+input = np.asarray(y).astype("uint8")   # [702,1020]
+
+# 保存原lr的y通道图
+# out_img_y = Image.fromarray(np.uint8(input), mode='L')
+# out_img_y.save(f"input_y_{args.image}")
+# exit(-1)
+
+input = np.reshape(input, [1, input.shape[0], input.shape[1]])
+input = torch.from_numpy(np.ascontiguousarray(input)).float()
+input_1 = input.clone()
+
+def hr_convert(hr):
+    # [1,32,32]
+    img = hr
+    img = (np.array(img)[0]).astype("uint8")
+
+    img_new = (img.astype("uint8") / 2).astype("uint8")  # 除2取下界等于右移位运算
+    img = img.astype("uint8")
+    img_new = img ^ img_new  # 异或运算
+
+    [h, w] = img_new.shape[0], img_new.shape[1]
+
+    image = np.empty((8, h, w), dtype=np.uint8)  # 存 余数
+
+    for i in range(8):
+        image[i, :, :] = img_new % 2  # 转格雷码8维图像
+        img_new = img_new // 2
+
+    x_finally = torch.from_numpy(np.ascontiguousarray(image)).float()  # [8,32,32]
+    # image = torch.from_numpy(np.ascontiguousarray(image)).float()
+    # x_finally = image.cuda()
+    return x_finally
+
+input = hr_convert(input)   # [8,256,256]
+
+input = input.view(1, 8, input.shape[1], input.shape[2])
+input_1 = input.view(1, -1, input_1.shape[1], input_1.shape[2])
+# input = np.reshape()
+
+# img_to_tensor = transforms.ToTensor()
+# input = img_to_tensor(y).view(1, -1, y.size[1], y.size[0])  # we only work with the "Y" channel
 
 device = torch.device("cuda:0" if (torch.cuda.is_available() and args.cuda) else "cpu")
 print(device)
 model = torch.load(args.model).to(device)
 input = input.to(device)
 
-out = model(input)
+out = model(input, input_1)
 
 def str_reverse1(s):
     return s[::-1]
@@ -72,67 +115,63 @@ def channel_8_1(sr):
         x_temp = x_bin[0, :, :]*1 + x_bin[1, :, :]*2 + x_bin[2, :, :]*4 + x_bin[3, :, :]*8 + x_bin[4, :, :]*16 + x_bin[5, :, :]*32 + x_bin[6, :, :]*64 + x_bin[7, :, :]*128
         # x_1[x_0.shape[0]-1, :, :] = img1[0, :, :]*128 + img1[0, :, :]*64 + img1[0, :, :]*32 + img1[0, :, :]*16 + img1[0, :, :]*8 + img1[0, :, :]*4 + img1[0, :, :]*2
         x_finally[k, :, :, :] = x_temp
-    # img_1 = x_1  # [1, 512, 512]     (y_decode.png)
 
-    # # 保存图像
-    # img_1 = np.transpose(img_1, (1, 2, 0))
-    # print(np.max(img_1))
-    # print("1111111")
-    # print(img_1.shape)
-    # plt.imshow(img_1)
-    # plt.show()
-    # io.imsave("D:/CV例程/SRCNN-master/y_decode.png", img_1)
-    # img_cb = np.transpose(img_cb, (1, 2, 0))
-    # img_cr = np.transpose(img_cr, (1, 2, 0))
-    # io.imsave("/export/liuzhe/program2/RCAN_test/RCAN_TestCode/SR/BI/cb.png", img_cb)
-    # io.imsave("/export/liuzhe/program2/RCAN_test/RCAN_TestCode/SR/BI/cr.png", img_cr)
-
-    # img_2 = img_1
-
-    '''# 十进制格雷码转二进制的十进制数
-    img_2 = (img_1.astype("uint8") / 2).astype("uint8")  # 除2取下界等于右移位运算
-    img = img_1.astype("uint8")
-    img_2 = img ^ img_2  # 异或运算   [1, 512, 512]'''
-
-    # x_finally[:, 0, :, :] = img_2
-
-    # ycrcb转rgb
-    # a = x_finally[0, :, :, :]  # [3, h, w]
-    # a = np.transpose(a, (1, 2, 0))  # 转成  [512, 512, 3]
-
-    # y, cb, cr = cv2.split(img)
-    # img = cv2.merge([y, cr, cb])
-    # img = cv2.cvtColor(a, cv2.COLOR_YCrCb2RGB)  # [512,512,3]
-    # b,g,r = cv2.split(img)
-    # img = cv2.merge([r,g,b])
-    # img = np.transpose(img, (2, 0, 1))  # 转成[3,512,512]
-    # for i in range(x_0.shape[0]):
-    #     x_finally[i, :, :, :] = img
-    #
     x_finally = torch.from_numpy(np.ascontiguousarray(x_finally)).float()  # [1,1,512,512]
-    x_finally /= 255
+
     x_finally = x_finally.cuda()
     # print(x_finally.shape)
 
     return x_finally
 
+out = channel_8_1(out)  # [1,1,512,512]
 
-out = channel_8_1(out)
+# print('11111')
+# print(out.shape)
+# exit(-1)
+
 #srimg = np.transpose(out.cpu().detach().data.numpy()[0], (1, 2, 0))
 out = out.cpu()
 out_img_y = out[0].detach().numpy()
 # print(out_img_y)
-out_img_y *= 255.0
+# out_img_y *= 255.0
 out_img_y = out_img_y.clip(0, 255)
 
+# 输出lr处理后的y通道图像
 out_img_y = Image.fromarray(np.uint8(out_img_y[0]), mode='L')
+out_img_y.save(f"zoomed_{args.image}")
 
 
-# plt.imshow(out_img_y)
-# plt.show()
+cb = np.asarray(cb).astype("uint8")
+cr = np.asarray(cr).astype("uint8")
+cb = np.reshape(cb, [1, 1, cb.shape[0], cb.shape[1]])
+cr = np.reshape(cr, [1, 1, cr.shape[0], cr.shape[1]])
+cb = torch.from_numpy(np.ascontiguousarray(cb)).float()
+cr = torch.from_numpy(np.ascontiguousarray(cr)).float()
 
-out_img = Image.merge('YCbCr', [out_img_y, cb, cr]).convert('RGB')  # we merge the output of our network with the upscaled Cb and Cr from before
-                                                                    # before converting the result in RGB
+cb = F.upsample_bilinear(cb, scale_factor=2)
+cr = F.upsample_bilinear(cr, scale_factor=2)
+cb = cb.cpu().detach().data.numpy()[0, 0, :, :]
+cr = cr.cpu().detach().data.numpy()[0, 0, :, :]
+cb = Image.fromarray(np.uint8(cb))
+cr = Image.fromarray(np.uint8(cr))
+
+# c = np.asarray(y).astype("uint8")
+# c = np.reshape(c, [1, 1, c.shape[0], c.shape[1]])
+# c = torch.from_numpy(np.ascontiguousarray(c)).float()
+# c = F.upsample_bilinear(c, scale_factor=2)
+# c = c.cpu().detach().data.numpy()[0, 0, :, :]
+# y = Image.fromarray(np.uint8(c))
+
+out_img = Image.merge('YCbCr', [out_img_y, cb, cr]).convert('RGB')
+
+img_pre = Image.open('/export/liuzhe/program2/SRCNN/0010.png').convert('RGB')
+
+out_img = np.asarray(out_img)
+img_pre = np.asarray(img_pre)
+# print(out_img.shape)
+
+psnr = skimage.measure.compare_psnr(out_img, img_pre, data_range=255)
+print(psnr)
+
 out_img.save(f"zoomed_{args.image}")
-# plt.imshow(out_img)
-# plt.show()
+
