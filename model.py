@@ -12,8 +12,8 @@ class SRCNN(nn.Module):
         super(SRCNN, self).__init__()
         self.conv1 = nn.Conv2d(8, 64, kernel_size=9, padding=4)
         self.conv2 = nn.Conv2d(64, 32, kernel_size=1, padding=0)
-        self.conv3 = nn.Conv2d(32, 1, kernel_size=5, padding=2)
-        self.conv4 = nn.Conv2d(1, 1, kernel_size=1, padding=0)
+        self.conv3 = nn.Conv2d(32, 8, kernel_size=5, padding=2)
+        self.conv4 = nn.Conv2d(8, 8, kernel_size=1, padding=0)
 
     # def forward(self, x):
     #
@@ -87,7 +87,7 @@ class SRCNN(nn.Module):
     #     return out
 
     def forward(self, x, not_8):
-        it = not_8.cuda().float()
+        # it = not_8.cuda().float()
         # print(x.shape)
 
         # inte = x
@@ -115,10 +115,10 @@ class SRCNN(nn.Module):
 
 
         out = F.relu(self.conv2(out))   # [4,32,32,32]
-        print(out)
+        # print(out)
         # out = F.relu(self.conv3(out))  # [4,8,32,32]
-        out = self.conv3(out)
-        print(out)
+        out = F.relu(self.conv3(out))
+        # print(out)
 
         # xshow = x.cpu().detach().data.numpy()[0, 0, :, :]
         # out = out.cpu().detach().data.numpy()[0, 0, :, :]
@@ -132,9 +132,9 @@ class SRCNN(nn.Module):
         # out = F.interpolate(out, scale_factor=2, mode='nearest')
 
         # it = F.upsample_bilinear(it, scale_factor=2)
-        # out = F.upsample_bilinear(out, scale_factor=2)
+        out = F.upsample_bilinear(out, scale_factor=2)
 
-        # out = self.conv4(out)
+        out = self.conv4(out)
         # out = F.relu(out)
 
         # out += it
