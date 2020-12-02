@@ -24,7 +24,7 @@ def load_img(lr_path, hr_path):
 
 def random_crop(images, split):
 
-    h, w = images[0].shape[:2]
+    h, w = images[1].shape[:2]
 
     crops = []
 
@@ -115,13 +115,14 @@ class DatasetFromFolder(Dataset):
         # input_1 = F.upsample_bilinear(input, scale_factor=2)
         # input_1 = input_1[0]
         # print(input_1.shape)
+        # print(torch.mean(input))
 
         input = self.hr_convert(input)
 
         target = torch.from_numpy(np.ascontiguousarray(target)).float()
 
         target_hr = target.clone()
-        # target = self.hr_convert(target)  # [8, 32, 32]的tensor
+        target = self.hr_convert(target)  # [8, 32, 32]的tensor
 
         # 保存8通道hr、lr图像
         # hr_8 = (target.cpu().detach().data.numpy()).astype('uint8')
@@ -129,8 +130,8 @@ class DatasetFromFolder(Dataset):
         # hr_8 = np.transpose(hr_8, [1, 2, 0])  # [96,96,8]
         # sr_8 = np.transpose(sr_8, [1, 2, 0])  # [96,96,8]
 
-        # cv2.imwrite('/export/liuzhe/program2/SRCNN/hr_8_sr_8/hr.png', hr_8 * 255)
-        # cv2.imwrite('/export/liuzhe/program2/SRCNN/hr_8_sr_8/sr.png', sr_8 * 255)
+        # cv2.imwrite('/export/liuzhe/program2/SRCNN/hr_8_sr_8/hr.png', hr_8*255 )
+        # cv2.imwrite('/export/liuzhe/program2/SRCNN/hr_8_sr_8/sr.png', sr_8*255 )
         # exit(-1)
         # for i in range(8):
         #     cv2.imwrite('/export/liuzhe/program2/SRCNN/hr_8_sr_8/hr_{}.png'.format(i), hr_8[:, :, i] * 255)
@@ -138,6 +139,8 @@ class DatasetFromFolder(Dataset):
         # exit(-1)
 
         # print(np.max(input))
+        # print(torch.mean(input))
+        # print(torch.max(input))
 
         return input, target, target_hr, input_1    # tensor
 
@@ -148,6 +151,7 @@ class DatasetFromFolder(Dataset):
         # [1,32,32]
         img = hr
         img = (np.array(img)[0] * 255).astype("uint8")
+        # print(hr)
 
         # img_new = img
 
@@ -162,6 +166,8 @@ class DatasetFromFolder(Dataset):
         for i in range(8):
             image[i, :, :] = img_new % 2  # 转格雷码8维图像
             img_new = img_new // 2
+        # print(image)
+        # print(np.mean(image))
 
         x_finally = torch.from_numpy(np.ascontiguousarray(image)).float()  # [8,32,32]
         # image = torch.from_numpy(np.ascontiguousarray(image)).float()
